@@ -1,0 +1,862 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum UploadStatus {
+  CREATED
+  UPLOADED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum CandidateKind {
+  CANDIDATE
+  PARTY
+  BLANK
+  NULL
+  OTHER
+}
+
+enum TerritoryLevel {
+  STATE
+  METROPOLITAN_REGION
+  MUNICIPALITY
+  NEIGHBORHOOD
+  ZONE
+  SECTION
+}
+
+enum ImportErrorSeverity {
+  WARNING
+  ERROR
+  FATAL
+}
+
+enum PoliticalContactStatus {
+  PROSPECT
+  ACTIVE
+  SUPPORTER
+  UNDECIDED
+  OPPOSED
+  INACTIVE
+}
+
+enum InfluenceLevel {
+  LOW
+  MEDIUM
+  HIGH
+  STRATEGIC
+}
+
+enum FieldVisitStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PoliticalDemandStatus {
+  OPEN
+  TRIAGED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+enum CampaignEventType {
+  WALK
+  MEETING
+  RALLY
+  CANVASSING
+  TRAINING
+  COMMUNITY
+}
+
+enum CampaignEventStatus {
+  PLANNED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum OperationPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum StrategicInsightType {
+  OPPORTUNITY
+  RISK
+  ALERT
+  RECOMMENDATION
+  NEGLECTED_AREA
+  ORPHAN_VOTES
+}
+
+enum StrategicInsightSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id          String   @id @db.Uuid
+  email       String   @unique @db.Citext
+  name        String?
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships OrganizationMember[]
+  uploads     ElectoralUpload[]
+  createdOperationPlans OperationPlan[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  plan      String   @default("professional")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members   OrganizationMember[]
+  campaigns Campaign[]
+  uploads   ElectoralUpload[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  operationPlans OperationPlan[]
+  strategicInsights StrategicInsight[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  role           MembershipRole @default(ANALYST)
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Campaign {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String
+  slug           String
+  electionYear   Int            @map("election_year")
+  state          String         @default("PR")
+  regionalFocus  String[]       @default(["CURITIBA", "SÃO JOSÉ DOS PINHAIS", "REGIÃO METROPOLITANA DE CURITIBA"]) @map("regional_focus")
+  status         CampaignStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploads       ElectoralUpload[]
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  operationPlans OperationPlan[]
+  strategicInsights StrategicInsight[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+model ElectoralUpload {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  campaignId     String       @map("campaign_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  fileName       String       @map("file_name")
+  fileSize       BigInt       @map("file_size")
+  storagePath    String       @map("storage_path")
+  checksum       String?
+  status         UploadStatus @default(CREATED)
+  totalRows      Int          @default(0) @map("total_rows")
+  processedRows  Int          @default(0) @map("processed_rows")
+  failedRows     Int          @default(0) @map("failed_rows")
+  errorMessage   String?      @map("error_message")
+  metadata       Json         @default("{}")
+  parserVersion  String       @default("tse-section-votes-v2") @map("parser_version")
+  startedAt      DateTime?    @map("started_at")
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  electoralData ElectoralData[]
+  importErrors  ElectoralImportError[]
+  voteSummaries TerritorialVoteSummary[]
+
+  @@index([organizationId, status, createdAt])
+  @@index([campaignId, status])
+  @@map("electoral_uploads")
+}
+
+model Municipality {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tseCode     Int     @unique @map("tse_code")
+  ibgeCode    Int?    @unique @map("ibge_code")
+  name        String
+  normalized  String
+  state       String  @default("PR")
+  region      String?
+  isPriority  Boolean @default(false) @map("is_priority")
+  boundary    Unsupported("geometry(MultiPolygon,4326)")?
+  centroid    Unsupported("geometry(Point,4326)")?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  zones         ElectoralZone[]
+  sections      ElectoralSection[]
+  neighborhoods Neighborhood[]
+  regions       TerritorialRegion[]
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  planAllocations OperationPlanAllocation[]
+  strategicInsights StrategicInsight[]
+
+  @@index([state, isPriority])
+  @@index([normalized])
+  @@map("municipalities")
+}
+
+model ElectoralZone {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  municipalityId String @map("municipality_id") @db.Uuid
+  number         Int
+  boundary       Unsupported("geometry(MultiPolygon,4326)")?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  municipality  Municipality       @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  sections      ElectoralSection[]
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  planAllocations OperationPlanAllocation[]
+  strategicInsights StrategicInsight[]
+
+  @@unique([municipalityId, number])
+  @@index([number])
+  @@map("electoral_zones")
+}
+
+model ElectoralSection {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  municipalityId    String  @map("municipality_id") @db.Uuid
+  electoralZoneId   String  @map("electoral_zone_id") @db.Uuid
+  neighborhoodId    String? @map("neighborhood_id") @db.Uuid
+  regionId          String? @map("region_id") @db.Uuid
+  number            Int
+  votingPlaceNumber Int     @map("voting_place_number")
+  votingPlaceName   String  @map("voting_place_name")
+  address           String
+  neighborhood      String?
+  latitude          Decimal? @db.Decimal(10, 7)
+  longitude         Decimal? @db.Decimal(10, 7)
+  geom              Unsupported("geometry(Point,4326)")?
+  geocodedAt        DateTime? @map("geocoded_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  municipality  Municipality    @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  electoralZone ElectoralZone   @relation(fields: [electoralZoneId], references: [id], onDelete: Cascade)
+  neighborhoodArea Neighborhood?   @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  region        TerritorialRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  planAllocations OperationPlanAllocation[]
+  strategicInsights StrategicInsight[]
+
+  @@unique([municipalityId, electoralZoneId, number])
+  @@index([municipalityId, votingPlaceNumber])
+  @@index([neighborhood])
+  @@index([neighborhoodId])
+  @@index([regionId])
+  @@map("electoral_sections")
+}
+
+model ElectoralOffice {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code       Int      @unique
+  name       String
+  normalized String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  candidates    Candidate[]
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  operationPlans OperationPlan[]
+
+  @@index([normalized])
+  @@map("electoral_offices")
+}
+
+model Party {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  acronym        String
+  normalized     String
+  number         Int?
+  name           String?
+  electionYear   Int?     @map("election_year")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  candidates    Candidate[]
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+
+  @@unique([acronym, electionYear])
+  @@index([number])
+  @@index([normalized])
+  @@map("parties")
+}
+
+model Neighborhood {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  municipalityId String  @map("municipality_id") @db.Uuid
+  name           String
+  normalized     String
+  source         String  @default("manual")
+  boundary       Unsupported("geometry(MultiPolygon,4326)")?
+  centroid       Unsupported("geometry(Point,4326)")?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  municipality  Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  sections      ElectoralSection[]
+  voteSummaries TerritorialVoteSummary[]
+  politicalLeaders PoliticalLeader[]
+  supporters PoliticalSupporter[]
+  fieldVisits FieldVisit[]
+  campaignEvents PoliticalEvent[]
+  demands PoliticalDemand[]
+  planAllocations OperationPlanAllocation[]
+  strategicInsights StrategicInsight[]
+
+  @@unique([municipalityId, normalized])
+  @@index([normalized])
+  @@map("neighborhoods")
+}
+
+model TerritorialRegion {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  municipalityId String?        @map("municipality_id") @db.Uuid
+  level          TerritoryLevel
+  code           String
+  name           String
+  normalized     String
+  source         String         @default("manual")
+  boundary       Unsupported("geometry(MultiPolygon,4326)")?
+  centroid       Unsupported("geometry(Point,4326)")?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  municipality  Municipality? @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  sections      ElectoralSection[]
+  voteSummaries TerritorialVoteSummary[]
+
+  @@unique([level, code])
+  @@index([municipalityId, level])
+  @@index([normalized])
+  @@map("territorial_regions")
+}
+
+model Candidate {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  officeId       String?       @map("office_id") @db.Uuid
+  partyId        String?       @map("party_id") @db.Uuid
+  electionYear   Int           @map("election_year")
+  officeCode     Int           @map("office_code")
+  officeName     String        @map("office_name")
+  ballotNumber   Int           @map("ballot_number")
+  candidateSeq   BigInt        @map("candidate_seq")
+  name           String
+  normalizedName String        @map("normalized_name")
+  kind           CandidateKind @default(CANDIDATE)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  office        ElectoralOffice? @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  party         Party?           @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  electoralData ElectoralData[]
+  voteSummaries TerritorialVoteSummary[]
+  operationPlans OperationPlan[]
+  strategicInsights StrategicInsight[]
+
+  @@unique([electionYear, officeCode, ballotNumber, candidateSeq])
+  @@index([electionYear, officeCode, normalizedName])
+  @@index([officeId])
+  @@index([partyId])
+  @@index([kind])
+  @@map("candidates")
+}
+
+model ElectoralData {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uploadId       String   @map("upload_id") @db.Uuid
+  campaignId     String   @map("campaign_id") @db.Uuid
+  municipalityId String   @map("municipality_id") @db.Uuid
+  electoralZoneId String  @map("electoral_zone_id") @db.Uuid
+  sectionId      String   @map("section_id") @db.Uuid
+  candidateId    String   @map("candidate_id") @db.Uuid
+  officeId       String?  @map("office_id") @db.Uuid
+  partyId        String?  @map("party_id") @db.Uuid
+  electionYear   Int      @map("election_year")
+  electionCode   Int      @map("election_code")
+  round          Int
+  officeCode     Int      @map("office_code")
+  votes          Int
+  electionDate   DateTime @map("election_date") @db.Date
+  generatedAt    DateTime @map("generated_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  upload        ElectoralUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  campaign      Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  municipality  Municipality   @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  electoralZone ElectoralZone  @relation(fields: [electoralZoneId], references: [id], onDelete: Restrict)
+  section       ElectoralSection @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  candidate     Candidate       @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  office        ElectoralOffice? @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  party         Party?           @relation(fields: [partyId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, electionYear, officeCode])
+  @@index([municipalityId, officeCode, candidateId])
+  @@index([electoralZoneId, candidateId])
+  @@index([sectionId])
+  @@index([candidateId])
+  @@index([officeId, candidateId])
+  @@index([partyId])
+  @@map("electoral_data")
+}
+
+model ElectoralImportError {
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uploadId  String              @map("upload_id") @db.Uuid
+  rowNumber Int?                @map("row_number")
+  code      String
+  severity  ImportErrorSeverity @default(ERROR)
+  message   String
+  rawRow    Json?               @map("raw_row")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  upload ElectoralUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId, severity])
+  @@index([code])
+  @@map("electoral_import_errors")
+}
+
+model TerritorialVoteSummary {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId          String         @map("campaign_id") @db.Uuid
+  uploadId            String?        @map("upload_id") @db.Uuid
+  electionYear        Int            @map("election_year")
+  electionCode        Int            @map("election_code")
+  round               Int
+  territoryLevel      TerritoryLevel @map("territory_level")
+  municipalityId      String?        @map("municipality_id") @db.Uuid
+  electoralZoneId     String?        @map("electoral_zone_id") @db.Uuid
+  sectionId           String?        @map("section_id") @db.Uuid
+  neighborhoodId      String?        @map("neighborhood_id") @db.Uuid
+  territorialRegionId String?        @map("territorial_region_id") @db.Uuid
+  officeId            String?        @map("office_id") @db.Uuid
+  partyId             String?        @map("party_id") @db.Uuid
+  candidateId         String         @map("candidate_id") @db.Uuid
+  votes               Int
+  totalVotes          Int            @default(0) @map("total_votes")
+  voteShare           Decimal?       @map("vote_share") @db.Decimal(8, 5)
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+
+  campaign          Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  upload            ElectoralUpload?  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  municipality      Municipality?     @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  electoralZone     ElectoralZone?    @relation(fields: [electoralZoneId], references: [id], onDelete: Cascade)
+  section           ElectoralSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  neighborhood      Neighborhood?     @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+  territorialRegion TerritorialRegion? @relation(fields: [territorialRegionId], references: [id], onDelete: Cascade)
+  office            ElectoralOffice?  @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  party             Party?            @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  candidate         Candidate         @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, electionYear, electionCode, round, territoryLevel, municipalityId, electoralZoneId, sectionId, neighborhoodId, territorialRegionId, officeId, candidateId])
+  @@index([campaignId, territoryLevel, electionYear, round])
+  @@index([municipalityId, officeId, candidateId])
+  @@index([electoralZoneId, officeId, candidateId])
+  @@index([sectionId, officeId, candidateId])
+  @@index([neighborhoodId, officeId, candidateId])
+  @@index([territorialRegionId, officeId, candidateId])
+  @@map("territorial_vote_summaries")
+}
+
+model PoliticalLeader {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  campaignId     String                 @map("campaign_id") @db.Uuid
+  name           String
+  phone          String?
+  email          String?
+  role           String?
+  influence      InfluenceLevel         @default(MEDIUM)
+  status         PoliticalContactStatus @default(PROSPECT)
+  territoryLevel TerritoryLevel         @default(MUNICIPALITY) @map("territory_level")
+  municipalityId String?                @map("municipality_id") @db.Uuid
+  electoralZoneId String?               @map("electoral_zone_id") @db.Uuid
+  sectionId      String?                @map("section_id") @db.Uuid
+  neighborhoodId String?                @map("neighborhood_id") @db.Uuid
+  estimatedVotes Int                    @default(0) @map("estimated_votes")
+  reliabilityScore Int                  @default(50) @map("reliability_score")
+  tags           String[]               @default([])
+  notes          String?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  supporters    PoliticalSupporter[]
+  visits        FieldVisit[]
+  events        PoliticalEvent[]
+  demands       PoliticalDemand[]
+
+  @@index([organizationId, campaignId, status])
+  @@index([campaignId, territoryLevel])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("political_leaders")
+}
+
+model PoliticalSupporter {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  campaignId     String                 @map("campaign_id") @db.Uuid
+  leaderId       String?                @map("leader_id") @db.Uuid
+  name           String
+  phone          String?
+  email          String?
+  status         PoliticalContactStatus @default(PROSPECT)
+  territoryLevel TerritoryLevel         @default(MUNICIPALITY) @map("territory_level")
+  municipalityId String?                @map("municipality_id") @db.Uuid
+  electoralZoneId String?               @map("electoral_zone_id") @db.Uuid
+  sectionId      String?                @map("section_id") @db.Uuid
+  neighborhoodId String?                @map("neighborhood_id") @db.Uuid
+  voteCommitmentScore Int               @default(50) @map("vote_commitment_score")
+  contactPreference String?             @map("contact_preference")
+  tags           String[]               @default([])
+  notes          String?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leader        PoliticalLeader?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  visits        FieldVisit[]
+
+  @@index([organizationId, campaignId, status])
+  @@index([leaderId])
+  @@index([campaignId, territoryLevel])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("political_supporters")
+}
+
+model FieldVisit {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  campaignId     String           @map("campaign_id") @db.Uuid
+  leaderId       String?          @map("leader_id") @db.Uuid
+  supporterId    String?          @map("supporter_id") @db.Uuid
+  assignedTo     String?          @map("assigned_to")
+  objective      String
+  result         String?
+  status         FieldVisitStatus @default(PLANNED)
+  territoryLevel TerritoryLevel   @default(MUNICIPALITY) @map("territory_level")
+  municipalityId String?          @map("municipality_id") @db.Uuid
+  electoralZoneId String?         @map("electoral_zone_id") @db.Uuid
+  sectionId      String?          @map("section_id") @db.Uuid
+  neighborhoodId String?          @map("neighborhood_id") @db.Uuid
+  scheduledFor   DateTime?        @map("scheduled_for")
+  completedAt    DateTime?        @map("completed_at")
+  votersReached  Int              @default(0) @map("voters_reached")
+  cost           Decimal?         @db.Decimal(12, 2)
+  notes          String?
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leader        PoliticalLeader?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  supporter     PoliticalSupporter? @relation(fields: [supporterId], references: [id], onDelete: SetNull)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, campaignId, status])
+  @@index([campaignId, scheduledFor])
+  @@index([leaderId])
+  @@index([supporterId])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("field_visits")
+}
+
+model PoliticalEvent {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  campaignId     String              @map("campaign_id") @db.Uuid
+  leaderId       String?             @map("leader_id") @db.Uuid
+  name           String
+  eventType      CampaignEventType   @default(MEETING) @map("event_type")
+  status         CampaignEventStatus @default(PLANNED)
+  territoryLevel TerritoryLevel      @default(MUNICIPALITY) @map("territory_level")
+  municipalityId String?             @map("municipality_id") @db.Uuid
+  electoralZoneId String?            @map("electoral_zone_id") @db.Uuid
+  sectionId      String?             @map("section_id") @db.Uuid
+  neighborhoodId String?             @map("neighborhood_id") @db.Uuid
+  startsAt       DateTime?           @map("starts_at")
+  expectedAudience Int               @default(0) @map("expected_audience")
+  actualAudience Int                 @default(0) @map("actual_audience")
+  cost           Decimal?            @db.Decimal(12, 2)
+  notes          String?
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leader        PoliticalLeader?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, campaignId, status])
+  @@index([campaignId, startsAt])
+  @@index([leaderId])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("political_events")
+}
+
+model PoliticalDemand {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  campaignId     String                @map("campaign_id") @db.Uuid
+  leaderId       String?               @map("leader_id") @db.Uuid
+  title          String
+  category       String
+  priority       Int                   @default(3)
+  status         PoliticalDemandStatus @default(OPEN)
+  territoryLevel TerritoryLevel        @default(MUNICIPALITY) @map("territory_level")
+  municipalityId String?               @map("municipality_id") @db.Uuid
+  electoralZoneId String?              @map("electoral_zone_id") @db.Uuid
+  sectionId      String?               @map("section_id") @db.Uuid
+  neighborhoodId String?               @map("neighborhood_id") @db.Uuid
+  description    String?
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leader        PoliticalLeader?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, campaignId, status])
+  @@index([campaignId, priority])
+  @@index([leaderId])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("political_demands")
+}
+
+model OperationPlan {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String              @map("organization_id") @db.Uuid
+  campaignId      String              @map("campaign_id") @db.Uuid
+  createdById     String?             @map("created_by_id") @db.Uuid
+  targetCandidateId String?           @map("target_candidate_id") @db.Uuid
+  targetOfficeId  String?             @map("target_office_id") @db.Uuid
+  name            String
+  territoryLevel  TerritoryLevel      @default(NEIGHBORHOOD) @map("territory_level")
+  targetVotes     Int                 @map("target_votes")
+  fieldWorkers    Int                 @map("field_workers")
+  vehicles        Int
+  budget          Decimal             @db.Decimal(12, 2)
+  status          OperationPlanStatus @default(DRAFT)
+  algorithmVersion String             @default("political-intelligence-v1") @map("algorithm_version")
+  totals          Json                @default("{}")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  targetCandidate Candidate? @relation(fields: [targetCandidateId], references: [id], onDelete: SetNull)
+  targetOffice ElectoralOffice? @relation(fields: [targetOfficeId], references: [id], onDelete: SetNull)
+  allocations  OperationPlanAllocation[]
+
+  @@index([organizationId, campaignId, status])
+  @@index([campaignId, createdAt])
+  @@index([targetCandidateId])
+  @@index([targetOfficeId])
+  @@map("operation_plans")
+}
+
+model OperationPlanAllocation {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId          String         @map("plan_id") @db.Uuid
+  territoryLevel  TerritoryLevel @map("territory_level")
+  municipalityId  String?        @map("municipality_id") @db.Uuid
+  electoralZoneId String?        @map("electoral_zone_id") @db.Uuid
+  sectionId       String?        @map("section_id") @db.Uuid
+  neighborhoodId  String?        @map("neighborhood_id") @db.Uuid
+  territoryName   String         @map("territory_name")
+  priorityScore   Decimal        @map("priority_score") @db.Decimal(8, 3)
+  potentialScore  Decimal        @map("potential_score") @db.Decimal(8, 3)
+  difficultyScore Decimal        @map("difficulty_score") @db.Decimal(8, 3)
+  competitionScore Decimal       @map("competition_score") @db.Decimal(8, 3)
+  opportunityScore Decimal       @map("opportunity_score") @db.Decimal(8, 3)
+  potentialVotes  Int            @map("potential_votes")
+  orphanVotes     Int            @default(0) @map("orphan_votes")
+  fieldWorkers    Int            @map("field_workers")
+  vehicles        Int
+  budget          Decimal        @db.Decimal(12, 2)
+  expectedVotes   Int            @map("expected_votes")
+  costPerExpectedVote Decimal?   @map("cost_per_expected_vote") @db.Decimal(12, 2)
+  rationale       String
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  plan          OperationPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  municipality  Municipality?     @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?    @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?     @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@index([planId, priorityScore])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("operation_plan_allocations")
+}
+
+model StrategicInsight {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String                   @map("organization_id") @db.Uuid
+  campaignId      String                   @map("campaign_id") @db.Uuid
+  candidateId     String?                  @map("candidate_id") @db.Uuid
+  type            StrategicInsightType
+  severity        StrategicInsightSeverity @default(MEDIUM)
+  title           String
+  description     String
+  recommendation  String
+  territoryLevel  TerritoryLevel           @map("territory_level")
+  municipalityId  String?                  @map("municipality_id") @db.Uuid
+  electoralZoneId String?                  @map("electoral_zone_id") @db.Uuid
+  sectionId       String?                  @map("section_id") @db.Uuid
+  neighborhoodId  String?                  @map("neighborhood_id") @db.Uuid
+  score           Decimal                  @default(0) @db.Decimal(8, 3)
+  metadata        Json                     @default("{}")
+  acknowledgedAt  DateTime?                @map("acknowledged_at")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  candidate     Candidate?         @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  municipality  Municipality?      @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  electoralZone ElectoralZone?     @relation(fields: [electoralZoneId], references: [id], onDelete: SetNull)
+  section       ElectoralSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  neighborhood  Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, campaignId, severity])
+  @@index([campaignId, type])
+  @@index([candidateId])
+  @@index([municipalityId])
+  @@index([electoralZoneId])
+  @@index([sectionId])
+  @@index([neighborhoodId])
+  @@map("strategic_insights")
+}
