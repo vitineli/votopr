@@ -2,6 +2,7 @@
 .env.local
 .env.production
 .next
+.deploy
 node_modules
 dist
 coverage
