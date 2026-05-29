@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import mapboxgl, { type GeoJSONSource, type MapLayerMouseEvent } from "mapbox-gl";
+import maplibregl, { type GeoJSONSource, type MapLayerMouseEvent } from "maplibre-gl";
 import {
   Activity,
   BarChart3,
@@ -67,10 +67,10 @@ const OSM_RASTER_STYLE = {
       }
     }
   ]
-} as mapboxgl.StyleSpecification;
+} as maplibregl.StyleSpecification;
 
 function applyMapData(
-  map: mapboxgl.Map,
+  map: maplibregl.Map,
   data: ElectoralFeatureCollection,
   mode: ElectoralMapMode
 ) {
@@ -159,7 +159,7 @@ function modeToMapLayers(mode: ElectoralMapMode) {
   };
 }
 
-function upsertMapLayers(map: mapboxgl.Map) {
+function upsertMapLayers(map: maplibregl.Map) {
   if (!map.getSource("electoral")) {
     map.addSource("electoral", {
       type: "geojson",
@@ -306,7 +306,7 @@ function upsertMapLayers(map: mapboxgl.Map) {
   }
 }
 
-function applyLayerVisibility(map: mapboxgl.Map, mode: ElectoralMapMode) {
+function applyLayerVisibility(map: maplibregl.Map, mode: ElectoralMapMode) {
   const visible = modeToMapLayers(mode);
   const set = (layer: string, shouldShow: boolean) => {
     if (map.getLayer(layer)) map.setLayoutProperty(layer, "visibility", shouldShow ? "visible" : "none");
@@ -320,7 +320,7 @@ function applyLayerVisibility(map: mapboxgl.Map, mode: ElectoralMapMode) {
   set("electoral-cluster-count", false);
 }
 
-function fitMapToBounds(map: mapboxgl.Map, bounds?: { west: number | null; south: number | null; east: number | null; north: number | null }) {
+function fitMapToBounds(map: maplibregl.Map, bounds?: { west: number | null; south: number | null; east: number | null; north: number | null }) {
   if (bounds?.west === null || bounds?.west === undefined || bounds.south === null || bounds.south === undefined || bounds.east === null || bounds.east === undefined || bounds.north === null || bounds.north === undefined) {
     return;
   }
@@ -453,14 +453,13 @@ function Metric({
 }
 
 export function ElectoralMapClient({
-  campaignId,
-  mapboxToken
+  campaignId
 }: {
   campaignId: string;
   mapboxToken?: string;
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
   const { mode, level, setMode, setLevel } = useMapStore();
   const [filters, setFilters] = useState<Omit<ElectoralMapFilters, "campaignId" | "level">>({});
   const [searchTerm, setSearchTerm] = useState("");
@@ -537,23 +536,17 @@ export function ElectoralMapClient({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    if (mapboxToken) {
-      mapboxgl.accessToken = mapboxToken;
-    }
-
-    const map = new mapboxgl.Map({
+    const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: mapboxToken ? "mapbox://styles/mapbox/dark-v11" : OSM_RASTER_STYLE,
+      style: OSM_RASTER_STYLE,
       center: PARANA_CENTER,
       zoom: 8.4,
       attributionControl: false,
       cooperativeGestures: true
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true, showCompass: false }), "bottom-right");
-    if (mapboxToken) {
-      map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
-    }
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: false }), "bottom-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
 
     map.on("load", () => {
       upsertMapLayers(map);
@@ -582,7 +575,7 @@ export function ElectoralMapClient({
       map.remove();
       mapRef.current = null;
     };
-  }, [mapboxToken]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -739,7 +732,7 @@ export function ElectoralMapClient({
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#090d12]/88 p-2 backdrop-blur-xl">
               <Badge variant="secondary">{levelLabels[deferredLevel]}</Badge>
               <Badge variant="secondary">{modeLabels[mode]}</Badge>
-              <Badge variant="outline">{mapboxToken ? "Mapbox" : "OpenStreetMap"}</Badge>
+              <Badge variant="outline">OpenStreetMap</Badge>
               <Badge variant={geoJson.data?.features.length ? "success" : "secondary"}>
                 {formatNumber(geoJson.data?.features.length ?? 0)} geometrias
               </Badge>
