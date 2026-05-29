@@ -4,7 +4,7 @@
 
 - Preencher [`.env.example`](C:/Users/Vinicius/Documents/eleições/.env.example) em `.env.local` e na Vercel.
 - Confirmar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `DIRECT_URL`.
-- Definir `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`.
+- Definir `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` apenas se for usar base premium do Mapbox; sem token, o mapa usa OpenStreetMap.
 - Manter `IMPORT_TARGET_STATE=PR`.
 
 ## 2. Banco E Supabase

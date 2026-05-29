@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +37,36 @@ import {
 } from "@/features/maps/hooks/use-map-data";
 
 const PARANA_CENTER: [number, number] = [-49.2733, -25.4284];
+
+const OSM_RASTER_STYLE = {
+  version: 8,
+  sources: {
+    "osm-base": {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      tileSize: 256,
+      attribution: "&copy; OpenStreetMap contributors"
+    }
+  },
+  layers: [
+    {
+      id: "osm-base",
+      type: "raster",
+      source: "osm-base",
+      paint: {
+        "raster-opacity": 0.72,
+        "raster-saturation": -0.45,
+        "raster-contrast": 0.18,
+        "raster-brightness-min": 0.08,
+        "raster-brightness-max": 0.72
+      }
+    }
+  ]
+} as mapboxgl.StyleSpecification;
 
 const levelLabels: Record<ElectoralMapLevel, string> = {
   MUNICIPALITY: "Municípios",
@@ -496,12 +525,15 @@ export function ElectoralMapClient({
   }, [deferredSearchTerm, options]);
 
   useEffect(() => {
-    if (!mapboxToken || !mapContainerRef.current || mapRef.current) return;
+    if (!mapContainerRef.current || mapRef.current) return;
 
-    mapboxgl.accessToken = mapboxToken;
+    if (mapboxToken) {
+      mapboxgl.accessToken = mapboxToken;
+    }
+
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: mapboxToken ? "mapbox://styles/mapbox/dark-v11" : OSM_RASTER_STYLE,
       center: PARANA_CENTER,
       zoom: 8.4,
       attributionControl: false,
@@ -694,6 +726,7 @@ export function ElectoralMapClient({
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#090d12]/88 p-2 backdrop-blur-xl">
               <Badge variant="secondary">{levelLabels[deferredLevel]}</Badge>
               <Badge variant="secondary">{modeLabels[mode]}</Badge>
+              <Badge variant="outline">{mapboxToken ? "Mapbox" : "OpenStreetMap"}</Badge>
               <Badge variant={geoJson.data?.features.length ? "success" : "secondary"}>
                 {formatNumber(geoJson.data?.features.length ?? 0)} geometrias
               </Badge>
@@ -710,22 +743,7 @@ export function ElectoralMapClient({
             </div>
           </div>
 
-          {mapboxToken ? (
-            <div ref={mapContainerRef} className="absolute inset-0" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_50%_30%,rgba(20,184,166,0.18),transparent_34%),#05070a] p-6">
-              <Card className="max-w-md border-white/10 bg-black/50 text-center backdrop-blur">
-                <CardContent className="p-6">
-                  <MapPinned className="mx-auto size-10 text-primary" />
-                  <h2 className="mt-4 text-lg font-semibold">Mapbox não configurado</h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Defina `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` no ambiente para carregar o mapa interativo real.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
+          <div ref={mapContainerRef} className="absolute inset-0" />
           {geoJson.isFetching || filterData.isLoading ? (
             <div className="absolute inset-x-4 bottom-4 z-10 flex items-center gap-3 rounded-lg border border-white/10 bg-[#090d12]/90 p-3 text-sm text-muted-foreground backdrop-blur-xl">
               <Loader2 className="size-4 animate-spin text-primary" />

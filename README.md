@@ -127,13 +127,14 @@ A rota `/maps` entrega o cockpit geoespacial profissional com Mapbox GL JS:
 - modos `Heatmap`, `Territorios`, `Clusters` e `Comparar`;
 - filtros por cargo, candidato, partido, municipio, bairro e zona eleitoral;
 - inspector territorial com votos, share, potencial, candidato dominante, comparacao e historico;
-- carregamento lazy do Mapbox para manter o bundle inicial leve;
+- carregamento lazy do mapa para manter o bundle inicial leve;
+- fallback automatico com OpenStreetMap quando nao houver token do Mapbox;
 - estado vazio operacional quando ainda nao existem geometrias reais no PostGIS.
 
-Configure o token publico do Mapbox:
+O token publico do Mapbox e opcional. Sem ele, o sistema usa OpenStreetMap como mapa base e mantem as camadas eleitorais reais por cima:
 
 ```bash
-NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk...
+NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=
 ```
 
 APIs de mapa:
