@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { parse } from "csv-parse";
 import { Pool } from "pg";
 import { Prisma, PrismaClient } from "@prisma/client";
@@ -19,7 +20,8 @@ import { rebuildAnalyticsForUpload } from "../src/services/analytics/rebuild";
 
 type Args = {
   file: string;
-  uploadId: string;
+  uploadId?: string;
+  campaignId?: string;
   batchSize: number;
   errorSampleSize: number;
   rebuildAnalytics: boolean;
@@ -77,17 +79,121 @@ function parseArgs(): Args {
 
   const file = get("file");
   const uploadId = get("upload-id");
+  const campaignId = get("campaign-id");
 
-  if (!file || !uploadId) {
-    throw new Error('Uso: npm run import:tse -- --file "D:\\Votacao\\votacao_secao_2022_PR.csv" --upload-id "<uuid>"');
+  if (!file || (!uploadId && !campaignId)) {
+    throw new Error(
+      'Uso: npm run import:tse -- --file "D:\\Votacao\\votacao_secao_2022_PR.csv" --campaign-id "<uuid>" ou --upload-id "<uuid>"'
+    );
   }
 
   return {
     file,
     uploadId,
+    campaignId,
     batchSize: Number(get("batch-size") ?? process.env.IMPORT_BATCH_SIZE ?? 20000),
     errorSampleSize: Number(get("error-sample-size") ?? process.env.IMPORT_ERROR_SAMPLE_SIZE ?? 250),
     rebuildAnalytics: get("rebuild-analytics") !== "false"
+  };
+}
+
+function jsonMetadata(input: Prisma.InputJsonValue) {
+  return input;
+}
+
+function createProgressMetadata(input: {
+  structure: Awaited<ReturnType<typeof detectTseCsvStructure>>;
+  startedAt: number;
+  processedRows: number;
+  failedRows: number;
+  rowNumber: number;
+  sourceFile: string;
+  mode: "created-from-campaign" | "existing-upload";
+}) {
+  const elapsedSeconds = Math.max(1, Math.round((Date.now() - input.startedAt) / 1000));
+
+  return jsonMetadata({
+    parser: "tse-section-votes-v2",
+    source: "TSE",
+    state: "PR",
+    importer: "local-streaming-worker",
+    mode: input.mode,
+    sourceFile: input.sourceFile,
+    csv: {
+      encoding: input.structure.encoding,
+      delimiter: input.structure.delimiter,
+      columns: input.structure.header,
+      optionalPresent: input.structure.optionalPresent
+    },
+    progress: {
+      elapsedSeconds,
+      rowsPerSecond: Math.round(input.processedRows / elapsedSeconds),
+      processedRows: input.processedRows,
+      failedRows: input.failedRows,
+      observedRows: input.rowNumber
+    }
+  });
+}
+
+async function resolveOrCreateUpload(prisma: PrismaClient, args: Args) {
+  if (args.uploadId) {
+    const upload = await prisma.electoralUpload.findUniqueOrThrow({
+      where: { id: args.uploadId },
+      select: { id: true, campaignId: true, organizationId: true }
+    });
+
+    return {
+      ...upload,
+      mode: "existing-upload" as const
+    };
+  }
+
+  const fileStat = await fs.promises.stat(args.file);
+  const campaign = await prisma.campaign.findUniqueOrThrow({
+    where: { id: args.campaignId! },
+    select: {
+      id: true,
+      organizationId: true,
+      organization: {
+        select: {
+          members: { select: { userId: true, role: true, createdAt: true } }
+        }
+      }
+    }
+  });
+
+  const owner = campaign.organization.members.find((member) => member.role === "OWNER");
+  const firstMember = [...campaign.organization.members]
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())[0];
+  const userId = owner?.userId ?? firstMember?.userId;
+
+  if (!userId) {
+    throw new Error("Campanha sem membro associado. Nao foi possivel definir user_id para electoral_uploads.");
+  }
+
+  const fileName = path.basename(args.file);
+  const upload = await prisma.electoralUpload.create({
+    data: {
+      organizationId: campaign.organizationId,
+      campaignId: campaign.id,
+      userId,
+      fileName,
+      fileSize: BigInt(fileStat.size),
+      storagePath: `local/${campaign.organizationId}/${campaign.id}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9_.-]/g, "_")}`,
+      status: "UPLOADED",
+      metadata: {
+        source: "TSE",
+        state: "PR",
+        importer: "local-streaming-worker",
+        sourceFile: args.file
+      }
+    },
+    select: { id: true, campaignId: true, organizationId: true }
+  });
+
+  return {
+    ...upload,
+    mode: "created-from-campaign" as const
   };
 }
 
@@ -500,13 +606,11 @@ async function main() {
   const args = parseArgs();
   const prisma = new PrismaClient();
   const pool = new Pool({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
+  let uploadForFailure: Awaited<ReturnType<typeof resolveOrCreateUpload>> | null = null;
 
   try {
-    const upload = await prisma.electoralUpload.findUniqueOrThrow({
-      where: { id: args.uploadId },
-      select: { id: true, campaignId: true }
-    });
-
+    const upload = await resolveOrCreateUpload(prisma, args);
+    uploadForFailure = upload;
     const structure = await detectTseCsvStructure(args.file);
 
     if (structure.missingRequired.length > 0) {
@@ -527,15 +631,15 @@ async function main() {
           errorMessage: null,
           startedAt: new Date(),
           completedAt: null,
-          metadata: {
-            parser: "tse-section-votes-v2",
-            csv: {
-              encoding: structure.encoding,
-              delimiter: structure.delimiter,
-              columns: structure.header,
-              optionalPresent: structure.optionalPresent
-            }
-          }
+          metadata: createProgressMetadata({
+            structure,
+            startedAt: Date.now(),
+            processedRows: 0,
+            failedRows: 0,
+            rowNumber: 0,
+            sourceFile: args.file,
+            mode: upload.mode
+          })
         }
       })
     ]);
@@ -548,6 +652,9 @@ async function main() {
     const startedAt = Date.now();
     const streamEncoding = structure.encoding === "utf8" || structure.encoding === "utf8-bom" ? "utf8" : "latin1";
 
+    console.info(`[import:tse] upload=${upload.id} campaign=${upload.campaignId} file="${args.file}"`);
+    console.info(`[import:tse] encoding=${structure.encoding} delimiter="${structure.delimiter}" batchSize=${args.batchSize}`);
+
     async function flush() {
       if (buffer.length === 0) return;
       await flushBatch(pool, upload.id, upload.campaignId, buffer.splice(0, buffer.length));
@@ -558,20 +665,24 @@ async function main() {
           processedRows,
           failedRows,
           totalRows: processedRows + failedRows,
-          metadata: {
-            parser: "tse-section-votes-v2",
-            csv: {
-              encoding: structure.encoding,
-              delimiter: structure.delimiter,
-              optionalPresent: structure.optionalPresent
-            },
-            progress: {
-              elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
-              rowsPerSecond: Math.round(processedRows / Math.max(1, (Date.now() - startedAt) / 1000))
-            }
-          }
+          metadata: createProgressMetadata({
+            structure,
+            startedAt,
+            processedRows,
+            failedRows,
+            rowNumber,
+            sourceFile: args.file,
+            mode: upload.mode
+          })
         }
       });
+
+      const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      console.info(
+        `[import:tse] rows=${processedRows + failedRows} processed=${processedRows} failed=${failedRows} rate=${Math.round(
+          processedRows / elapsedSeconds
+        )}/s`
+      );
     }
 
     const parser = fs.createReadStream(args.file).pipe(
@@ -620,6 +731,7 @@ async function main() {
     await flush();
 
     if (args.rebuildAnalytics) {
+      console.info(`[import:tse] rebuilding analytics for upload=${upload.id}`);
       await rebuildAnalyticsForUpload(pool, upload.id, upload.campaignId);
     }
 
@@ -630,18 +742,31 @@ async function main() {
         processedRows,
         failedRows,
         totalRows: processedRows + failedRows,
-        completedAt: new Date()
+        completedAt: new Date(),
+        metadata: createProgressMetadata({
+          structure,
+          startedAt,
+          processedRows,
+          failedRows,
+          rowNumber,
+          sourceFile: args.file,
+          mode: upload.mode
+        })
       }
     });
+
+    console.info(`[import:tse] completed upload=${upload.id} processed=${processedRows} failed=${failedRows}`);
   } catch (error) {
-    await prisma.electoralUpload.update({
-      where: { id: args.uploadId },
-      data: {
-        status: "FAILED",
-        errorMessage: error instanceof Error ? error.message : "Falha desconhecida",
-        completedAt: new Date()
-      }
-    }).catch(() => undefined);
+    if (uploadForFailure) {
+      await prisma.electoralUpload.update({
+        where: { id: uploadForFailure.id },
+        data: {
+          status: "FAILED",
+          errorMessage: error instanceof Error ? error.message : "Falha desconhecida",
+          completedAt: new Date()
+        }
+      }).catch(() => undefined);
+    }
     throw error;
   } finally {
     await pool.end();
