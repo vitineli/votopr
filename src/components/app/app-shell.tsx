@@ -77,6 +77,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   <Icon />
@@ -103,7 +104,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/uploads">
+              <Link href="/uploads" prefetch={false}>
                 <FileUp data-icon="inline-start" />
                 Importar CSV
               </Link>
@@ -125,7 +126,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/settings">
+                  <Link href="/settings" prefetch={false}>
                     <Settings data-icon="inline-start" />
                     Configurações
                   </Link>
@@ -149,7 +150,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               const Icon = item.icon;
               return (
                 <Button key={item.href} variant="outline" size="sm" asChild className="shrink-0">
-                  <Link href={item.href}>
+                  <Link href={item.href} prefetch={false}>
                     <Icon data-icon="inline-start" />
                     {item.label}
                   </Link>

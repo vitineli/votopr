@@ -1,13 +1,17 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { getEnv } from "@/lib/env";
 
 export function createSupabaseBrowserClient() {
-  const env = getEnv();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase publico nao configurado no ambiente do navegador.");
+  }
 
   return createBrowserClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    supabaseUrl,
+    supabaseAnonKey
   );
 }
