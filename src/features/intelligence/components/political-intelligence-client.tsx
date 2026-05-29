@@ -160,13 +160,13 @@ function MetricStack({ label, value, detail }: { label: string; value: number; d
 }
 
 export function PoliticalIntelligenceClient({ campaignId }: { campaignId: string }) {
-  const [territoryLevel, setTerritoryLevel] = useState<IntelligenceLevel>("NEIGHBORHOOD");
+  const [territoryLevel, setTerritoryLevel] = useState<IntelligenceLevel>("MUNICIPALITY");
   const [candidateId, setCandidateId] = useState("");
   const [officeId, setOfficeId] = useState("");
   const [fieldWorkers, setFieldWorkers] = useState(35);
   const [vehicles, setVehicles] = useState(8);
   const [budget, setBudget] = useState(45000);
-  const [targetVotes, setTargetVotes] = useState(6500);
+  const [targetVotes, setTargetVotes] = useState(30000);
   const [crmTab, setCrmTab] = useState<"leaders" | "supporters" | "visits" | "events" | "demands">("leaders");
   const [quickName, setQuickName] = useState("");
   const [quickDetail, setQuickDetail] = useState("");

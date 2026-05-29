@@ -8,7 +8,7 @@ import { requireWorkspace } from "@/services/security/api-auth";
 const createPlanSchema = z.object({
   campaignId: z.string().uuid(),
   name: z.string().trim().min(3).max(120).optional(),
-  territoryLevel: z.enum(["MUNICIPALITY", "NEIGHBORHOOD", "ZONE", "SECTION"]).default("NEIGHBORHOOD"),
+  territoryLevel: z.enum(["MUNICIPALITY", "NEIGHBORHOOD", "ZONE", "SECTION"]).default("MUNICIPALITY"),
   candidateId: z.string().uuid().optional(),
   officeId: z.string().uuid().optional(),
   electionYear: z.coerce.number().int().optional(),

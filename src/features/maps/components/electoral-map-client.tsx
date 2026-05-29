@@ -163,10 +163,7 @@ function upsertMapLayers(map: mapboxgl.Map) {
   if (!map.getSource("electoral")) {
     map.addSource("electoral", {
       type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterRadius: 46,
-      clusterMaxZoom: 12
+      data: { type: "FeatureCollection", features: [] }
     });
   }
 
@@ -316,11 +313,11 @@ function applyLayerVisibility(map: mapboxgl.Map, mode: ElectoralMapMode) {
   };
 
   set("electoral-heat", visible.heatmap);
-  set("electoral-fill", visible.polygons);
-  set("electoral-outline", visible.polygons);
-  set("electoral-points", visible.clusters || visible.heatmap);
-  set("electoral-clusters", visible.clusters);
-  set("electoral-cluster-count", visible.clusters);
+  set("electoral-fill", visible.polygons || visible.heatmap || visible.clusters);
+  set("electoral-outline", visible.polygons || visible.heatmap || visible.clusters);
+  set("electoral-points", false);
+  set("electoral-clusters", false);
+  set("electoral-cluster-count", false);
 }
 
 function fitMapToBounds(map: mapboxgl.Map, bounds?: { west: number | null; south: number | null; east: number | null; north: number | null }) {

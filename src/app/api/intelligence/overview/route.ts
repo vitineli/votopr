@@ -6,7 +6,7 @@ import { requireWorkspace } from "@/services/security/api-auth";
 
 const querySchema = z.object({
   campaignId: z.string().uuid(),
-  territoryLevel: z.enum(["MUNICIPALITY", "NEIGHBORHOOD", "ZONE", "SECTION"]).default("NEIGHBORHOOD"),
+  territoryLevel: z.enum(["MUNICIPALITY", "NEIGHBORHOOD", "ZONE", "SECTION"]).default("MUNICIPALITY"),
   candidateId: z.string().uuid().optional(),
   officeId: z.string().uuid().optional(),
   electionYear: z.coerce.number().int().optional(),
