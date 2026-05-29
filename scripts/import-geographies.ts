@@ -133,17 +133,19 @@ async function importNeighborhoods(pool: Pool, args: Args, features: GeoJsonFeat
           )
         LIMIT 1
       )
-      INSERT INTO neighborhoods (municipality_id, name, normalized, source, boundary, centroid)
+      INSERT INTO neighborhoods (municipality_id, name, normalized, slug, source, boundary, centroid)
       SELECT
         municipality.id,
         $4,
         $5,
+        lower(regexp_replace($5, '[^A-Z0-9]+', '-', 'g')),
         $6,
         ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($7), 4326)),
         ST_PointOnSurface(ST_SetSRID(ST_GeomFromGeoJSON($7), 4326))
       FROM municipality
       ON CONFLICT (municipality_id, normalized) DO UPDATE SET
         name = EXCLUDED.name,
+        slug = EXCLUDED.slug,
         source = EXCLUDED.source,
         boundary = EXCLUDED.boundary,
         centroid = EXCLUDED.centroid,

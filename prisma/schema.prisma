@@ -379,9 +379,13 @@ model Neighborhood {
   municipalityId String  @map("municipality_id") @db.Uuid
   name           String
   normalized     String
+  slug           String
   source         String  @default("manual")
+  officialCode   String? @map("official_code")
+  sourceUrl      String? @map("source_url")
   boundary       Unsupported("geometry(MultiPolygon,4326)")?
   centroid       Unsupported("geometry(Point,4326)")?
+  importedAt     DateTime? @map("imported_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -397,7 +401,9 @@ model Neighborhood {
   strategicInsights StrategicInsight[]
 
   @@unique([municipalityId, normalized])
+  @@unique([municipalityId, slug])
   @@index([normalized])
+  @@index([slug])
   @@map("neighborhoods")
 }
 

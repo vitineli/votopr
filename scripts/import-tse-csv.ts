@@ -390,8 +390,13 @@ async function flushBatch(pool: Pool, uploadId: string, campaignId: string, rows
         )
         WHERE neighborhood_name IS NOT NULL AND neighborhood_normalized IS NOT NULL
       )
-      INSERT INTO neighborhoods (municipality_id, name, normalized, source)
-      SELECT m.id, rows.neighborhood_name, rows.neighborhood_normalized, 'tse_csv'
+      INSERT INTO neighborhoods (municipality_id, name, normalized, slug, source)
+      SELECT
+        m.id,
+        rows.neighborhood_name,
+        rows.neighborhood_normalized,
+        lower(regexp_replace(rows.neighborhood_normalized, '[^A-Z0-9]+', '-', 'g')),
+        'tse_csv'
       FROM rows
       JOIN municipalities m ON m.tse_code = rows.tse_code
       ON CONFLICT (municipality_id, normalized) DO UPDATE SET
