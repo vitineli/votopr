@@ -43,13 +43,16 @@ export type ElectoralFeatureProperties = {
   dominantVotes: number | null;
   dominantVoteShare: number | null;
   potentialVotes: number;
+  intensity: number;
 };
 
 export type ElectoralFeatureCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, ElectoralFeatureProperties> & {
   metadata: {
     campaignId: string;
     level: ElectoralMapLevel;
+    filters: ElectoralMapFilters;
     bounds?: { west: number | null; south: number | null; east: number | null; north: number | null };
+    maxVotes: number;
     generatedAt: string;
     emptyReason: string | null;
   };

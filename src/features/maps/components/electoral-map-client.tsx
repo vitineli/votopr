@@ -77,7 +77,7 @@ function applyMapData(
   upsertMapLayers(map);
   const source = map.getSource("electoral") as GeoJSONSource | undefined;
   source?.setData(data);
-  applyLayerVisibility(map, mode);
+  applyLayerVisibility(map, mode, data);
   fitMapToBounds(map, data.metadata?.bounds);
 }
 
@@ -108,6 +108,26 @@ function formatNumber(value: number | null | undefined) {
 function formatPercent(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) return "sem dado";
   return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+}
+
+function getEmptyMapMessage(level: ElectoralMapLevel) {
+  switch (level) {
+    case "NEIGHBORHOOD":
+      return "Bairros precisam do GeoJSON oficial do IPPUC/municipio importado e associado aos votos. Municipios ja estao operacionais.";
+    case "ZONE":
+      return "Zonas eleitorais ja existem como agregacao, mas ainda nao possuem geometria territorial oficial carregada para desenho no mapa.";
+    case "SECTION":
+      return "Secoes precisam de geocodificacao dos locais de votacao para aparecerem como pontos reais no mapa.";
+    case "MUNICIPALITY":
+      return "Nao ha geometrias municipais para este filtro.";
+  }
+}
+
+function getLegendLabel(mode: ElectoralMapMode, data?: ElectoralFeatureCollection) {
+  const hasComparison = Boolean(data?.metadata.filters.candidateId && data.metadata.filters.compareCandidateId);
+  if (mode === "compare" && hasComparison) return "Vantagem sobre comparado";
+  if (data?.metadata.filters.candidateId) return "Votos do candidato";
+  return "Votos no recorte";
 }
 
 function SelectField({
@@ -205,28 +225,21 @@ function upsertMapLayers(map: maplibregl.Map) {
       filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "MultiPolygon"]],
       paint: {
         "fill-color": [
-          "case",
-          [">", ["coalesce", ["get", "shareDelta"], 0], 4],
+          "interpolate",
+          ["linear"],
+          ["coalesce", ["get", "intensity"], 0],
+          0,
+          "#0f172a",
+          0.25,
+          "#0e7490",
+          0.5,
           "#14b8a6",
-          ["<", ["coalesce", ["get", "shareDelta"], 0], -4],
-          "#ef4444",
-          [
-            "interpolate",
-            ["linear"],
-            ["coalesce", ["get", "voteShare"], 0],
-            0,
-            "#0f172a",
-            15,
-            "#0e7490",
-            35,
-            "#14b8a6",
-            55,
-            "#f59e0b",
-            75,
-            "#ef4444"
-          ]
+          0.75,
+          "#f59e0b",
+          1,
+          "#ef4444"
         ],
-        "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", "votes"], 0], 0, 0.22, 25000, 0.74],
+        "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", "intensity"], 0], 0, 0.25, 1, 0.78],
         "fill-outline-color": "rgba(255,255,255,0.16)"
       }
     });
@@ -306,12 +319,49 @@ function upsertMapLayers(map: maplibregl.Map) {
   }
 }
 
-function applyLayerVisibility(map: maplibregl.Map, mode: ElectoralMapMode) {
+function applyFillColor(map: maplibregl.Map, mode: ElectoralMapMode, data?: ElectoralFeatureCollection) {
+  if (!map.getLayer("electoral-fill")) return;
+
+  const comparisonActive = mode === "compare" && Boolean(data?.metadata.filters.candidateId && data.metadata.filters.compareCandidateId);
+  const expression = comparisonActive
+    ? [
+        "case",
+        [">", ["coalesce", ["get", "shareDelta"], 0], 8],
+        "#10b981",
+        [">", ["coalesce", ["get", "shareDelta"], 0], 2],
+        "#14b8a6",
+        ["<", ["coalesce", ["get", "shareDelta"], 0], -8],
+        "#ef4444",
+        ["<", ["coalesce", ["get", "shareDelta"], 0], -2],
+        "#f59e0b",
+        "#334155"
+      ]
+    : [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["get", "intensity"], 0],
+        0,
+        "#0f172a",
+        0.25,
+        "#0e7490",
+        0.5,
+        "#14b8a6",
+        0.75,
+        "#f59e0b",
+        1,
+        "#ef4444"
+      ];
+
+  map.setPaintProperty("electoral-fill", "fill-color", expression);
+}
+
+function applyLayerVisibility(map: maplibregl.Map, mode: ElectoralMapMode, data?: ElectoralFeatureCollection) {
   const visible = modeToMapLayers(mode);
   const set = (layer: string, shouldShow: boolean) => {
     if (map.getLayer(layer)) map.setLayoutProperty(layer, "visibility", shouldShow ? "visible" : "none");
   };
 
+  applyFillColor(map, mode, data);
   set("electoral-heat", visible.heatmap);
   set("electoral-fill", visible.polygons || visible.heatmap || visible.clusters);
   set("electoral-outline", visible.polygons || visible.heatmap || visible.clusters);
@@ -592,8 +642,8 @@ export function ElectoralMapClient({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    applyLayerVisibility(map, mode);
-  }, [mode]);
+    applyLayerVisibility(map, mode, geoJson.data);
+  }, [mode, geoJson.data]);
 
   function updateFilter<K extends keyof typeof filters>(key: K, value: (typeof filters)[K] | "") {
     startTransition(() => {
@@ -602,6 +652,9 @@ export function ElectoralMapClient({
         ...current,
         [key]: value || undefined
       }));
+      if (key === "compareCandidateId" && value) {
+        setMode("compare");
+      }
     });
   }
 
@@ -693,6 +746,7 @@ export function ElectoralMapClient({
                 value={filters.compareCandidateId ?? ""}
                 options={filteredOptions.candidates}
                 onChange={(value) => updateFilter("compareCandidateId", value)}
+                disabled={!filters.candidateId}
                 icon={GitCompare}
               />
               <SelectField
@@ -763,7 +817,7 @@ export function ElectoralMapClient({
                 <MapPinned className="mx-auto size-10 text-primary" />
                 <h2 className="mt-4 text-lg font-semibold">Sem geometrias reais para este recorte</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Importe GeoJSON real de municípios, bairros, zonas ou seções e reconstrua as agregações. O mapa não renderiza polígonos falsos.
+                  {getEmptyMapMessage(deferredLevel)}
                 </p>
               </div>
             </div>
@@ -772,7 +826,7 @@ export function ElectoralMapClient({
           <div className="pointer-events-none absolute bottom-4 left-4 z-10 hidden rounded-lg border border-white/10 bg-[#090d12]/88 p-3 backdrop-blur-xl md:block">
             <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
               <BarChart3 className="size-3.5" />
-              Intensidade eleitoral
+              {getLegendLabel(mode, geoJson.data)}
             </div>
             <div className="h-2 w-56 rounded-full bg-gradient-to-r from-cyan-700 via-teal-400 via-amber-400 to-red-500" />
             <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">

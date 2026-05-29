@@ -150,6 +150,8 @@ function extraJoinForSectionSql(level: MapLayerLevel) {
 }
 
 export function toFeatureCollection(rows: MapFeatureRow[], filters: MapGeoJsonFilters, bounds?: BoundsRow) {
+  const maxVotes = Math.max(...rows.map((row) => row.votes), 0);
+
   return {
     type: "FeatureCollection",
     metadata: {
@@ -157,6 +159,7 @@ export function toFeatureCollection(rows: MapFeatureRow[], filters: MapGeoJsonFi
       level: filters.level,
       filters,
       bounds,
+      maxVotes,
       generatedAt: new Date().toISOString(),
       emptyReason: rows.length === 0 ? "Sem geometrias reais carregadas para este recorte." : null
     },
@@ -186,7 +189,8 @@ export function toFeatureCollection(rows: MapFeatureRow[], filters: MapGeoJsonFi
         dominantParty: row.dominant_party,
         dominantVotes: row.dominant_votes,
         dominantVoteShare: row.dominant_vote_share ? Number(row.dominant_vote_share) : null,
-        potentialVotes: row.potential_votes
+        potentialVotes: row.potential_votes,
+        intensity: maxVotes > 0 ? Number((row.votes / maxVotes).toFixed(6)) : 0
       }
     }))
   };
