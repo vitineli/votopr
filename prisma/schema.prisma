@@ -206,6 +206,34 @@ model Campaign {
   @@map("campaigns")
 }
 
+model VotingPlaceGeocode {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  municipalityId    String   @map("municipality_id") @db.Uuid
+  votingPlaceNumber Int      @map("voting_place_number")
+  votingPlaceName   String   @map("voting_place_name")
+  address           String
+  query             String
+  provider          String
+  providerPlaceId   String?  @map("provider_place_id")
+  status            String
+  confidence        Decimal? @db.Decimal(5, 4)
+  latitude          Decimal? @db.Decimal(10, 7)
+  longitude         Decimal? @db.Decimal(10, 7)
+  geom              Unsupported("geometry(Point,4326)")?
+  matchedDisplayName String? @map("matched_display_name")
+  rawResponse       Json?    @map("raw_response")
+  attemptedAt       DateTime @default(now()) @map("attempted_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  @@unique([municipalityId, votingPlaceNumber, provider])
+  @@index([municipalityId, status])
+  @@index([provider])
+  @@map("voting_place_geocodes")
+}
+
 model ElectoralUpload {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String       @map("organization_id") @db.Uuid
@@ -258,6 +286,7 @@ model Municipality {
   neighborhoods Neighborhood[]
   regions       TerritorialRegion[]
   electoralData ElectoralData[]
+  votingPlaceGeocodes VotingPlaceGeocode[]
   voteSummaries TerritorialVoteSummary[]
   politicalLeaders PoliticalLeader[]
   supporters PoliticalSupporter[]
