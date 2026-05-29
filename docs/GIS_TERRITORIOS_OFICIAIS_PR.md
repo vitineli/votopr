@@ -12,9 +12,9 @@ Status atual no banco:
 - Sao Jose dos Pinhais: 42 bairros oficiais com geometria.
 - Zonas eleitorais: sem poligonos oficiais carregados.
 - Secoes/locais de votacao: sem coordenadas no CSV `votacao_secao_2022_PR.csv`.
-- Voto por bairro: ainda nao operacional, porque as secoes nao estao vinculadas espacialmente aos bairros.
+- Voto por bairro: operacional de forma parcial e auditavel por correspondencia textual de nomes oficiais no texto TSE. Cobertura completa depende de geocodificacao dos locais de votacao.
 
-Conclusao: a base de bairros esta correta; a proxima etapa tecnica e geocodificar locais de votacao ou obter base oficial de locais com coordenadas para relacionar votos com bairros via `ST_Contains`.
+Conclusao: a base de bairros esta correta. Ja existe primeira vinculacao por texto oficial, mas a proxima etapa tecnica continua sendo geocodificar locais de votacao ou obter base oficial de locais com coordenadas para relacionar votos com bairros via `ST_Contains`.
 
 ## Fontes oficiais validadas
 
@@ -201,7 +201,17 @@ Resultado atual:
 - Os bairros oficiais existem.
 - Mas as secoes nao tem ponto geografico (`geom`) nem `neighborhood_id`.
 
-Sem coordenada real ou bairro oficial da secao, nao se deve forcar associacao por aproximacao textual. Isso criaria distorcao eleitoral.
+Sem coordenada real ou bairro oficial da secao, nao se deve forcar associacao por aproximacao textual ampla. O projeto usa apenas uma primeira vinculacao conservadora: quando o nome oficial do bairro aparece de forma textual e nao ambigua no nome/endereco do local de votacao do TSE.
+
+Resultado parcial atual:
+
+- Curitiba: 30 bairros com votos agregados por correspondencia textual oficial.
+- Sao Jose dos Pinhais: 8 bairros com votos agregados por correspondencia textual oficial.
+- Secoes vinculadas por texto oficial: 614.
+- Metodo registrado em `electoral_sections.neighborhood_assignment_method = 'official_neighborhood_name_in_tse_text'`.
+- Confianca registrada: `0.7000`.
+
+Esse metodo ja permite leitura inicial por bairro, mas nao deve ser tratado como cobertura completa da cidade.
 
 ## Estrategia recomendada para bairros
 

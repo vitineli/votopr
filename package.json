@@ -17,6 +17,7 @@
     "import:geo": "tsx scripts/import-geographies.ts",
     "import:ibge:municipalities": "tsx scripts/import-ibge-pr-municipalities.ts",
     "import:neighborhoods:official": "tsx scripts/import-official-neighborhoods.ts",
+    "assign:sections:neighborhoods": "tsx scripts/assign-sections-to-neighborhoods.ts",
     "analytics:rebuild": "tsx scripts/rebuild-analytics.ts",
     "seed:pr": "tsx scripts/seed-pr-territories.ts"
   },

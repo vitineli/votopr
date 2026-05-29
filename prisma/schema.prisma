@@ -312,6 +312,9 @@ model ElectoralSection {
   longitude         Decimal? @db.Decimal(10, 7)
   geom              Unsupported("geometry(Point,4326)")?
   geocodedAt        DateTime? @map("geocoded_at")
+  neighborhoodAssignedAt DateTime? @map("neighborhood_assigned_at")
+  neighborhoodAssignmentMethod String? @map("neighborhood_assignment_method")
+  neighborhoodAssignmentConfidence Decimal? @map("neighborhood_assignment_confidence") @db.Decimal(5, 4)
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
