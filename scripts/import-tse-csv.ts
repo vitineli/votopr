@@ -22,6 +22,7 @@ type Args = {
   file: string;
   uploadId?: string;
   campaignId?: string;
+  onlyCandidates: Set<string> | null;
   batchSize: number;
   errorSampleSize: number;
   rebuildAnalytics: boolean;
@@ -80,6 +81,7 @@ function parseArgs(): Args {
   const file = get("file");
   const uploadId = get("upload-id");
   const campaignId = get("campaign-id");
+  const onlyCandidates = parseCandidateFilter(get("only-candidates"));
 
   if (!file || (!uploadId && !campaignId)) {
     throw new Error(
@@ -91,10 +93,22 @@ function parseArgs(): Args {
     file,
     uploadId,
     campaignId,
+    onlyCandidates,
     batchSize: Number(get("batch-size") ?? process.env.IMPORT_BATCH_SIZE ?? 20000),
     errorSampleSize: Number(get("error-sample-size") ?? process.env.IMPORT_ERROR_SAMPLE_SIZE ?? 250),
     rebuildAnalytics: get("rebuild-analytics") !== "false"
   };
+}
+
+function parseCandidateFilter(value: string | undefined) {
+  if (!value) return null;
+
+  const candidates = value
+    .split(/[;,]/)
+    .map((candidate) => normalizeText(candidate))
+    .filter(Boolean);
+
+  return candidates.length > 0 ? new Set(candidates) : null;
 }
 
 function jsonMetadata(input: Prisma.InputJsonValue) {
@@ -106,9 +120,11 @@ function createProgressMetadata(input: {
   startedAt: number;
   processedRows: number;
   failedRows: number;
+  skippedRows: number;
   rowNumber: number;
   sourceFile: string;
   mode: "created-from-campaign" | "existing-upload";
+  candidateFilter: string[] | null;
 }) {
   const elapsedSeconds = Math.max(1, Math.round((Date.now() - input.startedAt) / 1000));
 
@@ -130,7 +146,11 @@ function createProgressMetadata(input: {
       rowsPerSecond: Math.round(input.processedRows / elapsedSeconds),
       processedRows: input.processedRows,
       failedRows: input.failedRows,
+      skippedRows: input.skippedRows,
       observedRows: input.rowNumber
+    },
+    filters: {
+      candidates: input.candidateFilter
     }
   });
 }
@@ -636,9 +656,11 @@ async function main() {
             startedAt: Date.now(),
             processedRows: 0,
             failedRows: 0,
+            skippedRows: 0,
             rowNumber: 0,
             sourceFile: args.file,
-            mode: upload.mode
+            mode: upload.mode,
+            candidateFilter: args.onlyCandidates ? [...args.onlyCandidates] : null
           })
         }
       })
@@ -646,6 +668,7 @@ async function main() {
 
     let processedRows = 0;
     let failedRows = 0;
+    let skippedRows = 0;
     let rowNumber = 1;
     const buffer: BufferedVoteRow[] = [];
     const importErrors: ImportErrorBuffer[] = [];
@@ -654,6 +677,9 @@ async function main() {
 
     console.info(`[import:tse] upload=${upload.id} campaign=${upload.campaignId} file="${args.file}"`);
     console.info(`[import:tse] encoding=${structure.encoding} delimiter="${structure.delimiter}" batchSize=${args.batchSize}`);
+    if (args.onlyCandidates) {
+      console.info(`[import:tse] candidateFilter=${[...args.onlyCandidates].join(" | ")}`);
+    }
 
     async function flush() {
       if (buffer.length === 0) return;
@@ -670,16 +696,18 @@ async function main() {
             startedAt,
             processedRows,
             failedRows,
+            skippedRows,
             rowNumber,
             sourceFile: args.file,
-            mode: upload.mode
+            mode: upload.mode,
+            candidateFilter: args.onlyCandidates ? [...args.onlyCandidates] : null
           })
         }
       });
 
       const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
       console.info(
-        `[import:tse] rows=${processedRows + failedRows} processed=${processedRows} failed=${failedRows} rate=${Math.round(
+        `[import:tse] rows=${rowNumber - 1} processed=${processedRows} skipped=${skippedRows} failed=${failedRows} rate=${Math.round(
           processedRows / elapsedSeconds
         )}/s`
       );
@@ -716,7 +744,12 @@ async function main() {
       }
 
       if (parsed.data.SG_UF !== PARANA_STATE) {
-        failedRows++;
+        skippedRows++;
+        continue;
+      }
+
+      if (args.onlyCandidates && !args.onlyCandidates.has(normalizeText(parsed.data.NM_VOTAVEL))) {
+        skippedRows++;
         continue;
       }
 
@@ -748,14 +781,16 @@ async function main() {
           startedAt,
           processedRows,
           failedRows,
+          skippedRows,
           rowNumber,
           sourceFile: args.file,
-          mode: upload.mode
+          mode: upload.mode,
+          candidateFilter: args.onlyCandidates ? [...args.onlyCandidates] : null
         })
       }
     });
 
-    console.info(`[import:tse] completed upload=${upload.id} processed=${processedRows} failed=${failedRows}`);
+    console.info(`[import:tse] completed upload=${upload.id} processed=${processedRows} skipped=${skippedRows} failed=${failedRows}`);
   } catch (error) {
     if (uploadForFailure) {
       await prisma.electoralUpload.update({

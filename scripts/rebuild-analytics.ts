@@ -10,12 +10,13 @@ function parseArgs() {
   };
 
   const uploadId = get("upload-id");
+  const campaignId = get("campaign-id");
 
-  if (!uploadId) {
-    throw new Error('Uso: npm run analytics:rebuild -- --upload-id "<uuid>"');
+  if (!uploadId && !campaignId) {
+    throw new Error('Uso: npm run analytics:rebuild -- --upload-id "<uuid>" ou --campaign-id "<uuid>"');
   }
 
-  return { uploadId };
+  return { uploadId, campaignId };
 }
 
 async function main() {
@@ -24,12 +25,23 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
 
   try {
-    const upload = await prisma.electoralUpload.findUniqueOrThrow({
-      where: { id: args.uploadId },
-      select: { id: true, campaignId: true }
-    });
+    const uploads = args.uploadId
+      ? [
+          await prisma.electoralUpload.findUniqueOrThrow({
+            where: { id: args.uploadId },
+            select: { id: true, campaignId: true }
+          })
+        ]
+      : await prisma.electoralUpload.findMany({
+          where: { campaignId: args.campaignId },
+          select: { id: true, campaignId: true },
+          orderBy: { createdAt: "asc" }
+        });
 
-    await rebuildAnalyticsForUpload(pool, upload.id, upload.campaignId);
+    for (const upload of uploads) {
+      console.info(`[analytics:rebuild] upload=${upload.id} campaign=${upload.campaignId}`);
+      await rebuildAnalyticsForUpload(pool, upload.id, upload.campaignId);
+    }
   } finally {
     await pool.end();
     await prisma.$disconnect();

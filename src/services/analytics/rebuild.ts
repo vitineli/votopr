@@ -5,6 +5,7 @@ type TerritoryDefinition = {
   selectScope: string;
   joins: string;
   where: string;
+  groupScope: string;
   partitionScope: string;
 };
 
@@ -20,6 +21,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "JOIN territorial_regions state_region ON state_region.level = 'STATE' AND state_region.code = 'PR'",
     where: "m.state = 'PR'",
+    groupScope: "state_region.id",
     partitionScope: "territorial_region_id"
   },
   {
@@ -33,6 +35,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "JOIN territorial_regions rmc_region ON rmc_region.level = 'METROPOLITAN_REGION' AND rmc_region.code = 'RMC'",
     where: "m.region = 'REGIAO_METROPOLITANA_CURITIBA' OR m.region = 'PRIORIDADE_MVP'",
+    groupScope: "rmc_region.id",
     partitionScope: "territorial_region_id"
   },
   {
@@ -46,6 +49,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "",
     where: "TRUE",
+    groupScope: "ed.municipality_id",
     partitionScope: "municipality_id"
   },
   {
@@ -59,6 +63,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "",
     where: "TRUE",
+    groupScope: "ed.municipality_id, ed.electoral_zone_id",
     partitionScope: "municipality_id, electoral_zone_id"
   },
   {
@@ -72,6 +77,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "",
     where: "TRUE",
+    groupScope: "ed.municipality_id, ed.electoral_zone_id, ed.section_id",
     partitionScope: "municipality_id, electoral_zone_id, section_id"
   },
   {
@@ -85,6 +91,7 @@ const territoryDefinitions: TerritoryDefinition[] = [
     `,
     joins: "JOIN electoral_sections s ON s.id = ed.section_id",
     where: "s.neighborhood_id IS NOT NULL",
+    groupScope: "ed.municipality_id, s.neighborhood_id",
     partitionScope: "municipality_id, neighborhood_id"
   }
 ];
@@ -138,7 +145,7 @@ export async function rebuildAnalyticsForUpload(pool: Pool, uploadId: string, ca
             ed.election_year,
             ed.election_code,
             ed.round,
-            ${territory.partitionScope},
+            ${territory.groupScope},
             ed.office_id,
             ed.party_id,
             ed.candidate_id

@@ -15,6 +15,7 @@
     "db:studio": "prisma studio",
     "import:tse": "tsx scripts/import-tse-csv.ts",
     "import:geo": "tsx scripts/import-geographies.ts",
+    "import:ibge:municipalities": "tsx scripts/import-ibge-pr-municipalities.ts",
     "analytics:rebuild": "tsx scripts/rebuild-analytics.ts",
     "seed:pr": "tsx scripts/seed-pr-territories.ts"
   },
