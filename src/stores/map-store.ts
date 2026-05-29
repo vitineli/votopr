@@ -9,7 +9,7 @@ type MapStore = {
 };
 
 export const useMapStore = create<MapStore>((set) => ({
-  mode: "heatmap",
+  mode: "boundaries",
   level: "MUNICIPALITY",
   setMode: (mode) => set({ mode }),
   setLevel: (level) => set({ level })

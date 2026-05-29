@@ -28,6 +28,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMapStore } from "@/stores/map-store";
 import {
   type ElectoralFeatureProperties,
+  type ElectoralFeatureCollection,
   type ElectoralMapFilters,
   type ElectoralMapLevel,
   type ElectoralMapMode,
@@ -58,15 +59,27 @@ const OSM_RASTER_STYLE = {
       type: "raster",
       source: "osm-base",
       paint: {
-        "raster-opacity": 0.72,
+        "raster-opacity": 0.86,
         "raster-saturation": -0.45,
         "raster-contrast": 0.18,
-        "raster-brightness-min": 0.08,
-        "raster-brightness-max": 0.72
+        "raster-brightness-min": 0.18,
+        "raster-brightness-max": 0.9
       }
     }
   ]
 } as mapboxgl.StyleSpecification;
+
+function applyMapData(
+  map: mapboxgl.Map,
+  data: ElectoralFeatureCollection,
+  mode: ElectoralMapMode
+) {
+  upsertMapLayers(map);
+  const source = map.getSource("electoral") as GeoJSONSource | undefined;
+  source?.setData(data);
+  applyLayerVisibility(map, mode);
+  fitMapToBounds(map, data.metadata?.bounds);
+}
 
 const levelLabels: Record<ElectoralMapLevel, string> = {
   MUNICIPALITY: "Municípios",
@@ -540,8 +553,10 @@ export function ElectoralMapClient({
       cooperativeGestures: true
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
+    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true, showCompass: false }), "bottom-right");
+    if (mapboxToken) {
+      map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
+    }
 
     map.on("load", () => {
       upsertMapLayers(map);
@@ -574,13 +589,14 @@ export function ElectoralMapClient({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded() || !geoJson.data) return;
+    if (!map || !geoJson.data) return;
 
-    upsertMapLayers(map);
-    const source = map.getSource("electoral") as GeoJSONSource | undefined;
-    source?.setData(geoJson.data);
-    applyLayerVisibility(map, mode);
-    fitMapToBounds(map, geoJson.data.metadata.bounds);
+    if (!map.isStyleLoaded()) {
+      map.once("load", () => applyMapData(map, geoJson.data, mode));
+      return;
+    }
+
+    applyMapData(map, geoJson.data, mode);
   }, [geoJson.data, mode]);
 
   useEffect(() => {
